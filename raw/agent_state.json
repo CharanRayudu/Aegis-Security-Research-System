@@ -1,0 +1,14 @@
+{
+  "known_endpoints": [
+    {
+      "body": {},
+      "headers": {},
+      "method": "GET",
+      "params": {},
+      "path": "/rest/user/1",
+      "source": "config"
+    }
+  ],
+  "tested_endpoints": {},
+  "updated_at": "2026-04-07T18:55:45.738685+00:00"
+}

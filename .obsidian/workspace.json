@@ -1,0 +1,218 @@
+{
+  "main": {
+    "id": "00b894064f251f77",
+    "type": "split",
+    "children": [
+      {
+        "id": "6aab10824710dc06",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4a4886c1fd829ed6",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "0cd99f7c77fdbb1e",
+    "type": "split",
+    "children": [
+      {
+        "id": "88c6b6868441afa3",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "4dde3c6082356665",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "e08ad1c4282111c8",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "baf0e5a23f5d85ff",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "da21ed4839670342",
+    "type": "split",
+    "children": [
+      {
+        "id": "abeabb9b111a7666",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "80643241270cc396",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "ce1cc9b9dbf66913",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "55ffc0188d9f352c",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "9e9a8d260b1f6d24",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "8aa7069e27ad0059",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "4a4886c1fd829ed6",
+  "lastOpenFiles": [
+    "findings/rest_user_1_probe.md",
+    "experiments/rest_user_1_probe.md",
+    "resources/user.md",
+    "Welcome.md",
+    "findings/rest_user_1_unauthenticated_request.md",
+    "raw/memory_store.json",
+    "agent/memory/__pycache__/__init__.cpython-312.pyc",
+    "agent/memory/__pycache__/store.cpython-312.pyc",
+    "agent/memory/__pycache__",
+    "agent/memory/__init__.py",
+    "agent/memory/store.py",
+    "agent/memory",
+    "findings/rest_user_2_probe__27_OR__271_27_3D_271_input_pollution.md",
+    "experiments/rest_user_2_probe__27_OR__271_27_3D_271_input_pollution.md",
+    "findings/rest_user_2_probe__27_OR__271_27_3D_271_probe_query_injection.md",
+    "experiments/rest_user_2_probe__27_OR__271_27_3D_271_probe_query_injection.md",
+    "findings/rest_user_2_probe__27_OR__271_27_3D_271_header_role_spoof.md",
+    "experiments/rest_user_2_probe__27_OR__271_27_3D_271_header_role_spoof.md",
+    "findings/rest_user_2_probe__27_OR__271_27_3D_271_unauthenticated_request.md",
+    "experiments/rest_user_2_probe__27_OR__271_27_3D_271_unauthenticated_request.md",
+    "hypotheses/rest_user_2_probe__27_OR__271_27_3D_271.md",
+    "endpoints/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271.md",
+    "findings/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_path_id_increment.md",
+    "experiments/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_path_id_increment.md",
+    "findings/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_input_pollution.md",
+    "experiments/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_input_pollution.md",
+    "findings/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_probe_query_injection.md",
+    "experiments/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_probe_query_injection.md",
+    "findings/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_header_role_spoof.md",
+    "experiments/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_header_role_spoof.md",
+    "findings/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_unauthenticated_request.md",
+    "experiments/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271_unauthenticated_request.md",
+    "hypotheses/rest_user_1_probe__27_OR__271_27_3D_271_probe__27_OR__271_27_3D_271.md",
+    "raw/agent_state.json",
+    "agent/storage/__pycache__/state_store.cpython-312.pyc",
+    "agent/executor/__pycache__/mutation_engine.cpython-312.pyc"
+  ]
+}
