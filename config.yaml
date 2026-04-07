@@ -3,7 +3,6 @@ headers:
   Accept: application/json
   User-Agent: Aegis-Security-Research-System/1.0
 auth: {}
-loop_interval_seconds: 30
 endpoints:
 - path: /rest/user/1
   method: GET

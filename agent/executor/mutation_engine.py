@@ -1,4 +1,4 @@
-"""Mutation engine for parameter tampering and basic fuzzing."""
+"""Mutation engine for IDOR-style identifier mutation."""
 
 from __future__ import annotations
 
@@ -6,113 +6,116 @@ from typing import Any
 
 
 class MutationEngine:
-    """Expands hypothesis-guided mutations with deterministic fuzzing."""
-
-    BASIC_FUZZ_STRINGS = [
-        "' OR '1'='1",
-        "<script>alert(1)</script>",
-        "../../../etc/passwd",
-        "\"",
-    ]
+    """Builds a small deterministic set of IDOR-oriented mutations."""
 
     def generate_mutations(
         self,
         endpoint: dict[str, Any],
         hypothesis: dict[str, Any],
     ) -> list[dict[str, Any]]:
-        base_mutations = [self._normalize_mutation(item, endpoint) for item in hypothesis.get("mutations", [])]
-        generated: list[dict[str, Any]] = []
+        mutations: list[dict[str, Any]] = []
+        mutations.extend(self._normalize_mutations(hypothesis.get("mutations", []), endpoint))
+        mutations.extend(self._path_identifier_mutations(endpoint))
+        mutations.extend(self._query_identifier_mutations(endpoint))
+        return self._dedupe(mutations)
 
-        params = endpoint.get("params") or {}
-        body = endpoint.get("body") or {}
-
-        if params:
-            generated.extend(self._parameter_mutations(params))
-        elif body:
-            generated.extend(self._body_mutations(body))
-        else:
-            generated.append(
+    def _normalize_mutations(
+        self,
+        source_mutations: list[dict[str, Any]],
+        endpoint: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for mutation in source_mutations:
+            normalized.append(
                 {
-                    "name": "probe_query_injection",
-                    "description": "Inject a generic probe parameter when the endpoint has no declared inputs.",
-                    "params": {"probe": self.BASIC_FUZZ_STRINGS[0]},
-                    "headers": {"X-Research-Probe": "generic-probe"},
-                    "body": endpoint.get("body") or {},
+                    "name": mutation["name"],
+                    "description": mutation.get("description", ""),
+                    "path": mutation.get("path", endpoint["path"]),
+                    "params": mutation.get("params", endpoint.get("params") or {}),
+                    "headers": mutation.get("headers", {}),
+                    "body": mutation.get("body", endpoint.get("body") or {}),
                 }
             )
+        return normalized
 
-        deduped: dict[str, dict[str, Any]] = {}
-        for mutation in base_mutations + generated:
-            deduped.setdefault(mutation["name"], mutation)
-        return list(deduped.values())
-
-    def _normalize_mutation(self, mutation: dict[str, Any], endpoint: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "name": mutation["name"],
-            "description": mutation.get("description", ""),
-            "path": mutation.get("path", endpoint["path"]),
-            "params": mutation.get("params", endpoint.get("params") or {}),
-            "headers": mutation.get("headers", {}),
-            "body": mutation.get("body", endpoint.get("body") or {}),
-        }
-
-    def _parameter_mutations(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def _path_identifier_mutations(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        path = endpoint["path"]
+        segments = path.split("/")
         mutations: list[dict[str, Any]] = []
+
+        for index in range(len(segments) - 1, -1, -1):
+            if not segments[index].isdigit():
+                continue
+
+            current_value = int(segments[index])
+            for label, new_value in [
+                ("increment", current_value + 1),
+                ("decrement", max(current_value - 1, 0)),
+                ("high_value", 999999),
+            ]:
+                updated = list(segments)
+                updated[index] = str(new_value)
+                mutations.append(
+                    {
+                        "name": f"path_{label}_{new_value}",
+                        "description": f"Replace path identifier {current_value} with {new_value}.",
+                        "path": "/".join(updated),
+                        "params": endpoint.get("params") or {},
+                        "headers": {},
+                        "body": endpoint.get("body") or {},
+                    }
+                )
+            break
+
+        return mutations
+
+    def _query_identifier_mutations(self, endpoint: dict[str, Any]) -> list[dict[str, Any]]:
+        params = endpoint.get("params") or {}
+        mutations: list[dict[str, Any]] = []
+
         for key, value in params.items():
-            if isinstance(value, int):
+            normalized_value = self._extract_numeric(value)
+            if normalized_value is None or not self._looks_like_identifier(key):
+                continue
+
+            for label, new_value in [
+                ("increment", normalized_value + 1),
+                ("decrement", max(normalized_value - 1, 0)),
+                ("high_value", 999999),
+            ]:
+                updated = dict(params)
+                updated[key] = new_value
                 mutations.append(
                     {
-                        "name": f"increment_param_{key}",
-                        "description": f"Increment numeric parameter {key} to test object boundary access.",
-                        "params": {**params, key: value + 1},
+                        "name": f"query_{key}_{label}_{new_value}",
+                        "description": f"Modify query identifier {key} from {normalized_value} to {new_value}.",
+                        "path": endpoint["path"],
+                        "params": updated,
                         "headers": {},
-                        "body": {},
+                        "body": endpoint.get("body") or {},
                     }
                 )
-                mutations.append(
-                    {
-                        "name": f"large_param_{key}",
-                        "description": f"Set {key} to a large integer to probe authorization and range handling.",
-                        "params": {**params, key: 999999},
-                        "headers": {},
-                        "body": {},
-                    }
-                )
-            else:
-                for index, fuzz in enumerate(self.BASIC_FUZZ_STRINGS, start=1):
-                    mutations.append(
-                        {
-                            "name": f"fuzz_param_{key}_{index}",
-                            "description": f"Fuzz parameter {key} with crafted input #{index}.",
-                            "params": {**params, key: fuzz},
-                            "headers": {"X-Research-Probe": f"param-fuzz-{key}-{index}"},
-                            "body": {},
-                        }
-                    )
+
         return mutations
 
-    def _body_mutations(self, body: dict[str, Any]) -> list[dict[str, Any]]:
-        mutations: list[dict[str, Any]] = []
-        for key, value in body.items():
-            if isinstance(value, int):
-                mutations.append(
-                    {
-                        "name": f"increment_body_{key}",
-                        "description": f"Increment numeric body field {key}.",
-                        "params": {},
-                        "headers": {},
-                        "body": {**body, key: value + 1},
-                    }
-                )
-            else:
-                for index, fuzz in enumerate(self.BASIC_FUZZ_STRINGS, start=1):
-                    mutations.append(
-                        {
-                            "name": f"fuzz_body_{key}_{index}",
-                            "description": f"Fuzz body field {key} with crafted input #{index}.",
-                            "params": {},
-                            "headers": {"X-Research-Probe": f"body-fuzz-{key}-{index}"},
-                            "body": {**body, key: fuzz},
-                        }
-                    )
-        return mutations
+    def _extract_numeric(self, value: Any) -> int | None:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
+    def _looks_like_identifier(self, key: str) -> bool:
+        lowered = key.lower()
+        return lowered == "id" or lowered.endswith("_id") or lowered.endswith("id")
+
+    def _dedupe(self, mutations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        deduped: dict[str, dict[str, Any]] = {}
+        for mutation in mutations:
+            signature = (
+                mutation["name"],
+                mutation.get("path"),
+                str(sorted((mutation.get("params") or {}).items())),
+            )
+            deduped.setdefault(str(signature), mutation)
+        return list(deduped.values())

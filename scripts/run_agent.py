@@ -16,10 +16,8 @@ from agent.core.loop import AutonomousResearchLoop
 def main() -> int:
     config_path = REPO_ROOT / "config.yaml"
     loop = AutonomousResearchLoop(str(config_path))
-    try:
-        loop.run_forever()
-    except KeyboardInterrupt:
-        print("[runner] Stop signal received, shutting down cleanly")
+    results = loop.run()
+    print(f"[runner] Completed single-pass run across {len(results)} endpoint(s)")
     return 0
 
 

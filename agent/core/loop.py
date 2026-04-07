@@ -1,16 +1,13 @@
-"""Main autonomous security research loop."""
+"""Main IDOR-focused research loop."""
 
 from __future__ import annotations
 
-from pathlib import Path
-import time
-from collections import deque
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from agent.core.discovery import EndpointDiscovery
 from agent.executor.http_client import HttpExecutor
 from agent.executor.mutation_engine import MutationEngine
 from agent.llm.reasoner import generate_hypotheses
@@ -34,7 +31,7 @@ class EndpointRecord:
 
 
 class AutonomousResearchLoop:
-    """Coordinates endpoint collection, hypothesis generation, execution, discovery, and storage."""
+    """Runs one local IDOR research pass across configured endpoints."""
 
     def __init__(self, config_path: str) -> None:
         self.config_path = config_path
@@ -43,13 +40,9 @@ class AutonomousResearchLoop:
         self.writer = MarkdownWriter(base_dir=str(self.base_dir))
         self.state_store = StateStore(base_dir=str(self.base_dir))
         self.memory_store = MemoryStore(base_dir=str(self.base_dir))
-        self.discovery = EndpointDiscovery(base_url=self.config["base_url"])
         self.mutation_engine = MutationEngine()
         self.diff_engine = DiffEngine()
-        self.executor = self._build_executor()
-
-    def _build_executor(self) -> HttpExecutor:
-        return HttpExecutor(
+        self.executor = HttpExecutor(
             base_url=self.config["base_url"],
             default_headers=self.config.get("headers", {}),
             auth=self.config.get("auth") or {},
@@ -60,13 +53,8 @@ class AutonomousResearchLoop:
         with open(config_path, "r", encoding="utf-8") as handle:
             return yaml.safe_load(handle) or {}
 
-    def _reload_runtime(self) -> None:
-        self.config = self._load_config(self.config_path)
-        self.executor = self._build_executor()
-
     def _load_endpoints(self) -> list[EndpointRecord]:
         endpoint_rows = self.config.get("endpoints", [])
-        print(f"[loop] Loaded {len(endpoint_rows)} endpoint(s) from config")
         endpoints = [
             EndpointRecord(
                 path=row["path"],
@@ -78,72 +66,21 @@ class AutonomousResearchLoop:
             )
             for row in endpoint_rows
         ]
+        print(f"[loop] Loaded {len(endpoints)} endpoint(s) from config")
         for endpoint in endpoints:
             self.state_store.add_known_endpoint(asdict(endpoint))
         return endpoints
 
-    def _enqueue_untested(self, queue: deque[EndpointRecord], enqueued: set[str]) -> int:
-        count = 0
-        for endpoint in self._load_endpoints():
-            signature = endpoint.signature()
-            if signature in enqueued or self.state_store.is_endpoint_tested(signature):
+    def _resource_from_path(self, path: str) -> str:
+        segments = [segment for segment in path.split("/") if segment]
+        for segment in reversed(segments):
+            lowered = segment.lower()
+            if segment.isdigit() or lowered in {"api", "rest", "v1", "v2", "v3"}:
                 continue
-            queue.append(endpoint)
-            enqueued.add(signature)
-            count += 1
-        return count
+            return segment
+        return "resource"
 
-    def _persist_endpoint_catalog(self, endpoint: EndpointRecord) -> None:
-        catalog = self.config.setdefault("endpoints", [])
-        candidate = {
-            "path": endpoint.path,
-            "method": endpoint.method.upper(),
-            "params": endpoint.params or {},
-            "headers": endpoint.headers or {},
-            "body": endpoint.body or {},
-            "source": endpoint.source,
-        }
-        if any(
-            row.get("path") == candidate["path"] and row.get("method", "GET").upper() == candidate["method"]
-            for row in catalog
-        ):
-            return
-
-        catalog.append(candidate)
-        with open(self.config_path, "w", encoding="utf-8") as handle:
-            yaml.safe_dump(self.config, handle, sort_keys=False)
-        print(f"[loop] Persisted discovered endpoint {candidate['method']} {candidate['path']} to config")
-
-    def _register_discovered_endpoints(
-        self,
-        queue: deque[EndpointRecord],
-        enqueued: set[str],
-        discovered: list[dict[str, Any]],
-    ) -> int:
-        added = 0
-        for entry in discovered:
-            endpoint = EndpointRecord(
-                path=entry["path"],
-                method=entry.get("method", "GET"),
-                params=entry.get("params") or {},
-                headers=entry.get("headers") or {},
-                body=entry.get("body") or {},
-                source=entry.get("source", "discovered"),
-            )
-            signature = endpoint.signature()
-            if signature in enqueued or self.state_store.is_endpoint_tested(signature):
-                continue
-
-            self._persist_endpoint_catalog(endpoint)
-            self.state_store.add_known_endpoint(asdict(endpoint))
-            self.writer.write_endpoint(asdict(endpoint))
-            queue.append(endpoint)
-            enqueued.add(signature)
-            added += 1
-            print(f"[loop] Discovered new endpoint {signature}")
-        return added
-
-    def _build_endpoint_payload(self, endpoint: EndpointRecord) -> dict[str, Any]:
+    def _endpoint_payload(self, endpoint: EndpointRecord) -> dict[str, Any]:
         return {
             "base_url": self.config["base_url"],
             "path": endpoint.path,
@@ -152,175 +89,136 @@ class AutonomousResearchLoop:
             "headers": endpoint.headers or {},
             "body": endpoint.body or {},
             "source": endpoint.source,
+            "resource": self._resource_from_path(endpoint.path),
         }
 
-    def _run_endpoint(self, endpoint: EndpointRecord) -> dict[str, Any]:
-        endpoint_payload = self._build_endpoint_payload(endpoint)
-        signature = endpoint.signature()
-        print(f"[loop] Processing {signature}")
-        self.writer.write_endpoint(endpoint_payload)
-        self.memory_store.save_memory(
-            {
-                "type": "endpoint",
-                "label": signature,
-                "path": endpoint.path,
-                "method": endpoint.method.upper(),
-                "payload": endpoint_payload,
-            }
-        )
+    def run(self) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        endpoints = self._load_endpoints()
+        print("[loop] Starting single-pass IDOR research run")
 
-        memory_query = f"{endpoint.method.upper()} {endpoint.path}"
-        memory_context = self.memory_store.search_memory(memory_query)
-        print(f"[loop] Using {len(memory_context)} memory item(s) to inform hypotheses for {signature}")
-        hypotheses = generate_hypotheses(endpoint_payload, memory_context=memory_context)
-        top_hypothesis = hypotheses[0]
-        hypothesis_record = {
-            "endpoint": endpoint_payload,
-            "selected_hypothesis": top_hypothesis,
-            "hypotheses": hypotheses,
-            "memory_context": memory_context,
-        }
-        self.writer.write_hypothesis(endpoint.path, hypothesis_record)
-        self.memory_store.save_memory(
-            {
-                "type": "hypothesis",
-                "label": signature,
-                "path": endpoint.path,
-                "method": endpoint.method.upper(),
-                "payload": hypothesis_record,
-            }
-        )
-
-        baseline = self.executor.send_request(
-            path=endpoint.path,
-            method=endpoint.method,
-            params=endpoint.params,
-            extra_headers=endpoint.headers,
-            json_body=endpoint.body,
-        )
-
-        discovered = self.discovery.discover_from_response(baseline)
-        experiments: list[dict[str, Any]] = []
-
-        for index, hypothesis in enumerate(hypotheses, start=1):
-            print(
-                f"[loop] Hypothesis {index}/{len(hypotheses)} "
-                f"confidence={hypothesis['confidence']:.2f} {hypothesis['name']}"
-            )
-            mutations = self.mutation_engine.generate_mutations(
-                endpoint=endpoint_payload,
-                hypothesis=hypothesis,
-            )
-            for mutation_index, mutation in enumerate(mutations, start=1):
-                print(
-                    f"[loop] Mutation {mutation_index}/{len(mutations)} for {signature}: "
-                    f"{mutation['name']}"
-                )
-                experiment_response = self.executor.send_request(
-                    path=mutation.get("path", endpoint.path),
-                    method=endpoint.method,
-                    params=mutation.get("params", endpoint.params),
-                    extra_headers={
-                        **(endpoint.headers or {}),
-                        **mutation.get("headers", {}),
-                    },
-                    json_body=mutation.get("body", endpoint.body),
-                )
-                validation = self.diff_engine.compare(
-                    baseline=baseline,
-                    candidate=experiment_response,
-                    mutation=mutation,
-                    hypothesis=hypothesis,
-                )
-                discovered.extend(self.discovery.discover_from_response(experiment_response))
-
-                experiment_record = {
-                    "endpoint": endpoint_payload,
-                    "hypothesis": hypothesis,
-                    "mutation": mutation,
-                    "baseline": baseline,
-                    "candidate": experiment_response,
-                    "validation": validation,
+        for endpoint in endpoints:
+            signature = endpoint.signature()
+            endpoint_payload = self._endpoint_payload(endpoint)
+            print(f"[loop] Processing {signature}")
+            self.writer.write_endpoint(endpoint_payload)
+            self.memory_store.save_memory(
+                {
+                    "type": "endpoint",
+                    "label": signature,
+                    "path": endpoint.path,
+                    "method": endpoint.method.upper(),
+                    "payload": endpoint_payload,
                 }
-                self.writer.write_experiment(endpoint.path, mutation["name"], experiment_record)
-                self.writer.write_finding(endpoint.path, mutation["name"], experiment_record)
-                self.memory_store.save_memory(
-                    {
-                        "type": "experiment",
-                        "label": f"{signature}::{mutation['name']}",
-                        "path": endpoint.path,
-                        "method": endpoint.method.upper(),
-                        "mutation_name": mutation["name"],
-                        "payload": experiment_record,
+            )
+
+            memory_context = self.memory_store.search_memory(f"{endpoint.method.upper()} {endpoint_payload['resource']}")
+            hypotheses = generate_hypotheses(endpoint_payload, memory_context=memory_context)
+            hypothesis_record = {
+                "endpoint": endpoint_payload,
+                "selected_hypothesis": hypotheses[0],
+                "hypotheses": hypotheses,
+                "memory_context": memory_context,
+            }
+            self.writer.write_hypothesis(endpoint.path, hypothesis_record)
+            self.memory_store.save_memory(
+                {
+                    "type": "hypothesis",
+                    "label": signature,
+                    "path": endpoint.path,
+                    "method": endpoint.method.upper(),
+                    "payload": hypothesis_record,
+                }
+            )
+
+            baseline = self.executor.send_request(
+                path=endpoint.path,
+                method=endpoint.method,
+                params=endpoint.params,
+                extra_headers=endpoint.headers,
+                json_body=endpoint.body,
+            )
+
+            experiments: list[dict[str, Any]] = []
+            executed_mutations: set[str] = set()
+            for hypothesis in hypotheses:
+                mutations = self.mutation_engine.generate_mutations(endpoint_payload, hypothesis)
+                print(f"[loop] Evaluating {len(mutations)} candidate mutation(s) for hypothesis {hypothesis['name']}")
+                for mutation in mutations:
+                    mutation_signature = (
+                        mutation.get("path", endpoint.path),
+                        str(sorted((mutation.get("params") or {}).items())),
+                    )
+                    if str(mutation_signature) in executed_mutations:
+                        continue
+                    executed_mutations.add(str(mutation_signature))
+
+                    candidate = self.executor.send_request(
+                        path=mutation.get("path", endpoint.path),
+                        method=endpoint.method,
+                        params=mutation.get("params", endpoint.params),
+                        extra_headers={
+                            **(endpoint.headers or {}),
+                            **mutation.get("headers", {}),
+                        },
+                        json_body=mutation.get("body", endpoint.body),
+                    )
+                    validation = self.diff_engine.compare(
+                        baseline=baseline,
+                        candidate=candidate,
+                        mutation=mutation,
+                        hypothesis=hypothesis,
+                    )
+                    experiment_record = {
+                        "endpoint": endpoint_payload,
+                        "hypothesis": hypothesis,
+                        "mutation": mutation,
+                        "baseline": baseline,
+                        "candidate": candidate,
+                        "validation": validation,
                     }
-                )
-                if validation["is_interesting"]:
+                    self.writer.write_experiment(endpoint.path, mutation["name"], experiment_record)
+                    self.writer.write_finding(endpoint.path, mutation["name"], experiment_record)
                     self.memory_store.save_memory(
                         {
-                            "type": "finding",
+                            "type": "experiment",
                             "label": f"{signature}::{mutation['name']}",
                             "path": endpoint.path,
                             "method": endpoint.method.upper(),
-                            "severity": validation["severity"],
                             "payload": experiment_record,
                         }
                     )
-                experiments.append(experiment_record)
+                    if validation["decision"] == "Confirmed":
+                        self.memory_store.save_memory(
+                            {
+                                "type": "finding",
+                                "label": f"{signature}::{mutation['name']}",
+                                "path": endpoint.path,
+                                "method": endpoint.method.upper(),
+                                "payload": experiment_record,
+                            }
+                        )
+                    experiments.append(experiment_record)
 
-        self.state_store.mark_endpoint_tested(
-            signature,
-            {
-                "path": endpoint.path,
-                "method": endpoint.method.upper(),
-                "last_run_status": baseline.get("status_code"),
-                "source": endpoint.source,
-            },
-        )
-        return {
-            "endpoint": endpoint_payload,
-            "selected_hypothesis": top_hypothesis,
-            "hypotheses": hypotheses,
-            "baseline": baseline,
-            "experiments": experiments,
-            "discovered_endpoints": discovered,
-        }
-
-    def run_cycle(self) -> list[dict[str, Any]]:
-        self._reload_runtime()
-        queue: deque[EndpointRecord] = deque()
-        enqueued: set[str] = set()
-        seeded = self._enqueue_untested(queue, enqueued)
-        print(f"[loop] Seeded queue with {seeded} untested endpoint(s)")
-
-        results: list[dict[str, Any]] = []
-        while queue:
-            endpoint = queue.popleft()
-            result = self._run_endpoint(endpoint)
-            results.append(result)
-            new_count = self._register_discovered_endpoints(
-                queue=queue,
-                enqueued=enqueued,
-                discovered=result["discovered_endpoints"],
+            self.state_store.mark_endpoint_tested(
+                signature,
+                {
+                    "path": endpoint.path,
+                    "method": endpoint.method.upper(),
+                    "source": endpoint.source,
+                    "baseline_status": baseline.get("status_code"),
+                    "experiment_count": len(experiments),
+                },
             )
-            print(
-                f"[loop] Completed {endpoint.signature()} | experiments={len(result['experiments'])} "
-                f"| new_endpoints={new_count} | queue_remaining={len(queue)}"
+            results.append(
+                {
+                    "endpoint": endpoint_payload,
+                    "baseline": baseline,
+                    "hypotheses": hypotheses,
+                    "experiments": experiments,
+                }
             )
+            print(f"[loop] Completed {signature} with {len(experiments)} experiment(s)")
 
-        print(f"[loop] Cycle complete with {len(results)} processed endpoint(s)")
+        print(f"[loop] Run complete. Processed {len(results)} endpoint(s)")
         return results
-
-    def run(self) -> list[dict[str, Any]]:
-        return self.run_cycle()
-
-    def run_forever(self) -> None:
-        cycle = 0
-        print("[loop] Continuous mode enabled")
-        while True:
-            cycle += 1
-            print(f"[loop] === Cycle {cycle} start ===")
-            results = self.run_cycle()
-            print(f"[loop] === Cycle {cycle} end | processed={len(results)} ===")
-            loop_interval = int(self.config.get("loop_interval_seconds", 30))
-            print(f"[loop] Sleeping for {loop_interval}s before next cycle")
-            time.sleep(loop_interval)

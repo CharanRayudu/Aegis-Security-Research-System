@@ -1,4 +1,4 @@
-"""Generate security hypotheses for API endpoints."""
+"""Generate IDOR-focused hypotheses for API endpoints."""
 
 from __future__ import annotations
 
@@ -13,115 +13,200 @@ DEFAULT_MODEL = "gpt-4o-mini"
 PLACEHOLDER_API_KEY = "OPENAI_API_KEY_HERE"
 
 
-def _local_hypotheses(
+def generate_hypotheses(
     endpoint_data: dict[str, Any],
     memory_context: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    print(f"[reasoner] Generating IDOR hypotheses for {endpoint_data['method']} {endpoint_data['path']}")
+    api_key = os.getenv("OPENAI_API_KEY", PLACEHOLDER_API_KEY)
+    if api_key == PLACEHOLDER_API_KEY:
+        print("[reasoner] Placeholder API key detected, using local IDOR reasoning")
+        return _local_hypotheses(endpoint_data, memory_context or [])
+
+    prompt = (
+        "You are an application security researcher focused only on IDOR and broken object-level authorization.\n"
+        "Use the endpoint shape, inferred resource meaning, and local memory context.\n"
+        "Return JSON only with a top-level key named hypotheses.\n"
+        "hypotheses must be a list of 1 to 2 objects sorted by strongest first.\n\n"
+        "Each object must contain:\n"
+        "{\n"
+        '  "name": "",\n'
+        '  "hypothesis": "",\n'
+        '  "test_cases": [],\n'
+        '  "confidence": "",\n'
+        '  "confidence_score": 0.0,\n'
+        '  "resource_understanding": "",\n'
+        '  "mutations": []\n'
+        "}\n\n"
+        "Rules:\n"
+        "- Keep scope limited to IDOR only\n"
+        "- confidence must be one of low, medium, high\n"
+        "- mutations must only modify path or query identifiers\n"
+        "- test_cases must describe practical baseline-vs-mutated authorization checks\n"
+        "- Use memory to avoid repeating weak ideas\n\n"
+        f"Endpoint data:\n{json.dumps(endpoint_data, indent=2)}\n\n"
+        f"Memory context:\n{json.dumps(memory_context or [], indent=2)}"
+    )
+
+    try:
+        client = OpenAI(api_key=api_key)
+        response = client.responses.create(model=DEFAULT_MODEL, input=prompt, temperature=0.1)
+        parsed = json.loads(response.output_text.strip())
+        hypotheses = parsed["hypotheses"]
+        hypotheses.sort(key=lambda item: item.get("confidence_score", 0), reverse=True)
+        return hypotheses
+    except Exception as exc:
+        print(f"[reasoner] OpenAI request failed: {exc}. Falling back to local IDOR reasoning")
+        return _local_hypotheses(endpoint_data, memory_context or [])
+
+
+def generate_hypothesis(
+    endpoint_data: dict[str, Any],
+    memory_context: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return generate_hypotheses(endpoint_data, memory_context or [])[0]
+
+
+def _local_hypotheses(endpoint_data: dict[str, Any], memory_context: list[dict[str, Any]]) -> list[dict[str, Any]]:
     path = endpoint_data["path"]
     method = endpoint_data.get("method", "GET")
     params = endpoint_data.get("params") or {}
-    body = endpoint_data.get("body") or {}
     resource = endpoint_data.get("resource") or _resource_from_path(path)
-    has_inputs = bool(params or body)
-    memory_context = memory_context or []
+    path_mutations = _path_mutations(path, params)
+    query_mutations = _query_mutations(path, params)
+    memory_summary = _memory_summary(memory_context)
+    has_identifier = bool(path_mutations or query_mutations)
 
-    confidence_bias = min(len(memory_context) * 0.02, 0.08)
-    memory_summary = _summarize_memory(memory_context)
+    primary = {
+        "name": "idor_identifier_replay",
+        "hypothesis": (
+            f"{method} {path} may expose another {resource} record when object identifiers are changed. "
+            f"Prior related context: {memory_summary}"
+        ),
+        "test_cases": [
+            "Send a baseline request to the configured object identifier.",
+            "Replay the request with nearby identifier values and compare authorization behavior.",
+            "Check whether the mutated response returns another object's data with a similar schema.",
+        ],
+        "confidence": "high" if has_identifier else "medium",
+        "confidence_score": 0.84 if has_identifier else 0.62,
+        "resource_understanding": f"The endpoint appears to operate on the '{resource}' resource.",
+        "mutations": path_mutations[:2] + query_mutations[:2],
+    }
 
-    hypotheses = [
-        {
-            "name": "authorization_bypass",
-            "confidence": _confidence_string(min((0.82 if "user" in path or "admin" in path else 0.63) + confidence_bias, 0.95)),
-            "confidence_score": min((0.82 if "user" in path or "admin" in path else 0.63) + confidence_bias, 0.95),
-            "risk_summary": "Access-control flaws often appear around direct object references.",
-            "hypothesis": (
-                f"{method} {path} may expose unauthorized {resource} data when identifiers or trust headers are changed. "
-                f"Memory context: {memory_summary}"
-            ),
-            "test_cases": [
-                "Replay the request without authorization headers.",
-                "Spoof user identity headers and compare authorization boundaries.",
-            ],
-            "mutations": [
-                {
-                    "name": "unauthenticated_request",
-                    "description": "Replay the request without authorization material.",
-                    "params": params,
-                    "headers": {"Authorization": ""},
-                    "body": body,
-                },
-                {
-                    "name": "header_role_spoof",
-                    "description": "Inject role-oriented headers to probe trust in client claims.",
-                    "params": params,
-                    "headers": {"X-Forwarded-User": "admin", "X-Original-User": "admin"},
-                    "body": body,
-                },
-            ],
-        },
-        {
-            "name": "input_validation_weakness",
-            "confidence": _confidence_string(min((0.71 if has_inputs else 0.52) + confidence_bias, 0.9)),
-            "confidence_score": min((0.71 if has_inputs else 0.52) + confidence_bias, 0.9),
-            "risk_summary": "Weak validation may produce differential behavior across malformed input.",
-            "hypothesis": (
-                f"{method} {path} may process malformed {resource} inputs inconsistently and leak validation behavior. "
-                f"Memory context: {memory_summary}"
-            ),
-            "test_cases": [
-                "Inject metacharacters into parameters and compare body structure.",
-                "Observe response size or error detail growth under malformed input.",
-            ],
-            "mutations": [
-                {
-                    "name": "input_pollution",
-                    "description": "Inject metacharacters to detect parser inconsistencies.",
-                    "params": {**params, "probe": "' OR '1'='1"},
-                    "headers": {"X-Research-Probe": "input-pollution"},
-                    "body": body,
-                }
-            ],
-        },
-        {
-            "name": "identifier_enumeration",
-            "confidence": _confidence_string(
-                min((0.68 if any(token.isdigit() for token in path.split("/")) else 0.48) + confidence_bias, 0.88)
-            ),
-            "confidence_score": min(
-                (0.68 if any(token.isdigit() for token in path.split("/")) else 0.48) + confidence_bias,
-                0.88,
-            ),
-            "risk_summary": "Sequential identifiers can expose object enumeration or boundary conditions.",
-            "hypothesis": (
-                f"{method} {path} may allow adjacent {resource} enumeration when nearby identifiers are requested. "
-                f"Memory context: {memory_summary}"
-            ),
-            "test_cases": [
-                "Increment the path identifier and compare status and response size.",
-                "Check whether adjacent objects expose similar schemas or leaked data.",
-            ],
-            "mutations": [
-                {
-                    "name": "path_id_increment",
-                    "description": "Request an adjacent identifier in the path when present.",
-                    "path": _increment_path_identifier(path),
-                    "params": params,
-                    "headers": {},
-                    "body": body,
-                }
-            ],
-        },
-    ]
-    return sorted(hypotheses, key=lambda item: item["confidence_score"], reverse=True)
+    secondary = {
+        "name": "idor_sparse_identifier_enumeration",
+        "hypothesis": (
+            f"{method} {path} may allow access to high-value or sparse {resource} identifiers without ownership checks. "
+            f"Prior related context: {memory_summary}"
+        ),
+        "test_cases": [
+            "Try a distant identifier such as 999999 and compare status code and response body size.",
+            "Treat unchanged denial responses as not confirmed rather than positive findings.",
+        ],
+        "confidence": "medium" if has_identifier else "low",
+        "confidence_score": 0.67 if has_identifier else 0.4,
+        "resource_understanding": f"The final path segments suggest a direct object lookup for '{resource}'.",
+        "mutations": _high_value_mutations(path, params),
+    }
+
+    hypotheses = [primary]
+    if secondary["mutations"]:
+        hypotheses.append(secondary)
+    return hypotheses
 
 
-def _increment_path_identifier(path: str) -> str:
+def _path_mutations(path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
     segments = path.split("/")
     for index in range(len(segments) - 1, -1, -1):
-        if segments[index].isdigit():
-            segments[index] = str(int(segments[index]) + 1)
-            return "/".join(segments)
-    return path
+        if not segments[index].isdigit():
+            continue
+        current = int(segments[index])
+        mutations = []
+        for new_value, label in [(current + 1, "increment"), (max(current - 1, 0), "decrement")]:
+            updated = list(segments)
+            updated[index] = str(new_value)
+            mutations.append(
+                {
+                    "name": f"path_{label}_{new_value}",
+                    "description": f"Replace path identifier with {new_value}.",
+                    "path": "/".join(updated),
+                    "params": params,
+                    "headers": {},
+                    "body": {},
+                }
+            )
+        return mutations
+    return []
+
+
+def _high_value_mutations(path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    mutations: list[dict[str, Any]] = []
+    path_segments = path.split("/")
+    for index in range(len(path_segments) - 1, -1, -1):
+        if path_segments[index].isdigit():
+            updated = list(path_segments)
+            updated[index] = "999999"
+            mutations.append(
+                {
+                    "name": "path_high_value_999999",
+                    "description": "Replace path identifier with a distant high value.",
+                    "path": "/".join(updated),
+                    "params": params,
+                    "headers": {},
+                    "body": {},
+                }
+            )
+            break
+
+    for key, value in params.items():
+        if _looks_like_identifier(key) and (isinstance(value, int) or (isinstance(value, str) and value.isdigit())):
+            updated = dict(params)
+            updated[key] = 999999
+            mutations.append(
+                {
+                    "name": f"query_{key}_high_value_999999",
+                    "description": f"Replace query identifier {key} with 999999.",
+                    "path": path,
+                    "params": updated,
+                    "headers": {},
+                    "body": {},
+                }
+            )
+    return mutations
+
+
+def _query_mutations(path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    mutations: list[dict[str, Any]] = []
+    for key, value in params.items():
+        if not _looks_like_identifier(key):
+            continue
+        numeric = _numeric_value(value)
+        if numeric is None:
+            continue
+        for new_value, label in [(numeric + 1, "increment"), (max(numeric - 1, 0), "decrement")]:
+            updated = dict(params)
+            updated[key] = new_value
+            mutations.append(
+                {
+                    "name": f"query_{key}_{label}_{new_value}",
+                    "description": f"Replace query identifier {key} with {new_value}.",
+                    "path": path,
+                    "params": updated,
+                    "headers": {},
+                    "body": {},
+                }
+            )
+    return mutations
+
+
+def _memory_summary(memory_context: list[dict[str, Any]]) -> str:
+    if not memory_context:
+        return "no related prior runs"
+    fragments = []
+    for item in memory_context[:3]:
+        fragments.append(item.get("label", item.get("type", "record")))
+    return ", ".join(fragments)
 
 
 def _resource_from_path(path: str) -> str:
@@ -134,81 +219,14 @@ def _resource_from_path(path: str) -> str:
     return "resource"
 
 
-def _confidence_string(score: float) -> str:
-    if score >= 0.8:
-        return "high"
-    if score >= 0.55:
-        return "medium"
-    return "low"
+def _looks_like_identifier(key: str) -> bool:
+    lowered = key.lower()
+    return lowered == "id" or lowered.endswith("_id") or lowered.endswith("id")
 
 
-def _summarize_memory(memory_context: list[dict[str, Any]]) -> str:
-    if not memory_context:
-        return "no prior related history"
-
-    labels = []
-    for item in memory_context[:4]:
-        labels.append(f"{item.get('type', 'record')}:{item.get('label', item.get('timestamp', 'unknown'))}")
-    return "; ".join(labels)
-
-
-def generate_hypotheses(
-    endpoint_data: dict[str, Any],
-    memory_context: list[dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    """Generate multiple ranked security hypotheses for a target endpoint."""
-
-    print(f"[reasoner] Generating ranked hypotheses for {endpoint_data['method']} {endpoint_data['path']}")
-    api_key = os.getenv("OPENAI_API_KEY", PLACEHOLDER_API_KEY)
-    if api_key == PLACEHOLDER_API_KEY:
-        print("[reasoner] Placeholder API key detected, using local ranked hypotheses")
-        return _local_hypotheses(endpoint_data, memory_context=memory_context)
-
-    prompt = (
-        "You are a security research assistant. Analyze the API endpoint using local memory context, the endpoint "
-        "shape, and the underlying resource semantics inferred from the path. Return JSON only with a top-level key "
-        "named hypotheses. hypotheses must be a list of exactly 3 objects sorted by confidence descending.\n\n"
-        "Each hypothesis object must contain:\n"
-        "- name\n"
-        "- hypothesis\n"
-        "- test_cases\n"
-        "- confidence\n"
-        "- confidence_score\n"
-        "- risk_summary\n"
-        "- mutations\n\n"
-        "Constraints:\n"
-        "- confidence must be one of: low, medium, high\n"
-        "- confidence_score must be a numeric score between 0 and 1\n"
-        "- test_cases must be a list of concrete checks the executor can run\n"
-        "- mutations must be a list of 1 to 4 objects with keys: name, description, path, params, headers, body\n"
-        "- Use past memory to reduce repetition and false positives\n"
-        "- Prefer hypotheses that are supported by status differences, response-size differences, or likely data leakage patterns\n\n"
-        f"Endpoint data:\n{json.dumps(endpoint_data, indent=2)}"
-        f"\n\nRelevant local memory:\n{json.dumps(memory_context or [], indent=2)}"
-    )
-
-    try:
-        client = OpenAI(api_key=api_key)
-        response = client.responses.create(
-            model=DEFAULT_MODEL,
-            input=prompt,
-            temperature=0.15,
-        )
-        content = response.output_text.strip()
-        parsed = json.loads(content)
-        hypotheses = parsed["hypotheses"]
-        hypotheses.sort(key=lambda item: item.get("confidence_score", 0), reverse=True)
-        print("[reasoner] Ranked hypotheses generated via OpenAI API")
-        return hypotheses
-    except Exception as exc:
-        print(f"[reasoner] OpenAI request failed: {exc}. Falling back to local ranked hypotheses")
-        return _local_hypotheses(endpoint_data, memory_context=memory_context)
-
-
-def generate_hypothesis(
-    endpoint_data: dict[str, Any],
-    memory_context: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Return the highest-confidence hypothesis for compatibility with existing callers."""
-
-    return generate_hypotheses(endpoint_data, memory_context=memory_context)[0]
+def _numeric_value(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
