@@ -1,5 +1,22 @@
-﻿{
-  "known_endpoints": [],
-  "tested_endpoints": {},
-  "updated_at": "2026-04-07T00:00:00+00:00"
+{
+  "known_endpoints": [
+    {
+      "body": {},
+      "headers": {},
+      "method": "GET",
+      "params": {},
+      "path": "/api/users/123",
+      "source": "config"
+    }
+  ],
+  "tested_endpoints": {
+    "GET::/api/users/123": {
+      "baseline_status": 0,
+      "experiment_count": 3,
+      "method": "GET",
+      "path": "/api/users/123",
+      "source": "config"
+    }
+  },
+  "updated_at": "2026-04-07T20:03:03.869832+00:00"
 }

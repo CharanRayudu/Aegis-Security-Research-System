@@ -6,7 +6,10 @@ import json
 import os
 from typing import Any
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:  # pragma: no cover - optional dependency path
+    OpenAI = None
 
 
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -19,8 +22,8 @@ def generate_hypotheses(
 ) -> list[dict[str, Any]]:
     print(f"[reasoner] Generating IDOR hypotheses for {endpoint_data['method']} {endpoint_data['path']}")
     api_key = os.getenv("OPENAI_API_KEY", PLACEHOLDER_API_KEY)
-    if api_key == PLACEHOLDER_API_KEY:
-        print("[reasoner] Placeholder API key detected, using local IDOR reasoning")
+    if api_key == PLACEHOLDER_API_KEY or OpenAI is None:
+        print("[reasoner] Using local deterministic IDOR reasoning")
         return _local_hypotheses(endpoint_data, memory_context or [])
 
     prompt = (

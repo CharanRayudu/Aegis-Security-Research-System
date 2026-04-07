@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Any
 
@@ -16,19 +17,43 @@ class MemoryStore:
         self.memory_path = self.base_dir / "raw" / "memory_store.json"
         self.memory_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.memory_path.exists():
-            self._write(
-                {
-                    "entries": [],
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                }
-            )
+            self._write(self._default_memory())
 
     def _read(self) -> dict[str, Any]:
-        return json.loads(self.memory_path.read_text(encoding="utf-8"))
+        if not self.memory_path.exists():
+            memory = self._default_memory()
+            self._write(memory)
+            return memory
+
+        try:
+            raw_text = self.memory_path.read_text(encoding="utf-8-sig")
+            if not raw_text.strip():
+                raise JSONDecodeError("empty file", raw_text, 0)
+            memory = json.loads(raw_text)
+        except (OSError, JSONDecodeError, ValueError):
+            memory = self._default_memory()
+            self._write(memory)
+            print(f"[memory] Recreated invalid or empty memory file at {self.memory_path}")
+            return memory
+
+        if not isinstance(memory, dict):
+            memory = self._default_memory()
+            self._write(memory)
+            print(f"[memory] Recreated malformed memory structure at {self.memory_path}")
+            return memory
+
+        memory.setdefault("entries", [])
+        return memory
 
     def _write(self, payload: dict[str, Any]) -> None:
         payload["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.memory_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    def _default_memory(self) -> dict[str, Any]:
+        return {
+            "entries": [],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     def save_memory(self, data: dict[str, Any]) -> dict[str, Any]:
         memory = self._read()

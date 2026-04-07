@@ -1,8 +1,8 @@
 # Aegis Security Research System
 
-`Aegis-Security-Research-System` is an early-stage Security Research Intelligence System built for local-first application security exploration.
+`Aegis-Security-Research-System` is an early-stage deterministic, local-first Security Research Intelligence System built for narrow HTTP authorization research.
 
-This repository is not yet a fully autonomous pentesting system. The current v1 is intentionally narrow: it performs deterministic IDOR-style HTTP testing against endpoints defined in configuration, compares baseline and mutated responses, and stores the results in an Obsidian-compatible vault layout.
+This repository is not a fully autonomous pentesting system. The current v1 is intentionally narrow: it performs deterministic IDOR-style HTTP testing against endpoints defined in configuration, compares baseline and mutated responses, and stores the results in an Obsidian-compatible vault layout.
 
 ## Current v1 Scope
 
@@ -10,7 +10,7 @@ The current implementation supports:
 
 - deterministic HTTP request execution
 - baseline versus mutated request comparison
-- IDOR and broken object-level authorization style testing
+- IDOR and broken object-level authorization style testing only
 - JSON or text response comparison
 - local markdown note generation
 - local JSON memory and state tracking
@@ -82,6 +82,8 @@ Install Python dependencies:
 python -m pip install -r requirements.txt
 ```
 
+The default v1 path is deterministic and local-first. No OpenAI package or API key is required for the core workflow.
+
 ## Configuration
 
 Edit `config.yaml` before running:
@@ -122,14 +124,16 @@ Outputs are written to:
 - `endpoints/`
 - `resources/`
 - `hypotheses/`
-- `experiments/`
-- `findings/`
+- `experiments/` for all executed mutations and their outcomes
+- `findings/` only for `Confirmed` results
 - `index.md`
 
 Local memory and state are stored in:
 
 - `raw/memory_store.json`
 - `raw/agent_state.json`
+
+If the local state files are missing, empty, or invalid JSON, the program recreates them automatically instead of crashing.
 
 ## Limitations
 
@@ -140,7 +144,7 @@ This is an early-stage research utility, not a mature scanner.
 - It does not discover auth context on its own.
 - It does not validate exploitability beyond response-based heuristics.
 - Network restrictions in the runtime environment can make results inconclusive.
-- Vault contents can accumulate stale notes from previous runs if you do not clear them.
+- Existing vault contents are not automatically archived between runs.
 
 ## Roadmap
 
@@ -155,4 +159,4 @@ Planned next steps for later versions:
 
 ## Status
 
-This repository now contains the first real implementation pass, but it should still be treated as an early v1 foundation rather than a complete autonomous security platform.
+This repository now contains an early v1 implementation pass and should be treated as a deterministic local research utility, not as a complete autonomous security platform.

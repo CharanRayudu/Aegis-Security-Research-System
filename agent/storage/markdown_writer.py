@@ -24,7 +24,6 @@ class MarkdownWriter:
         self.index_path = self.base_dir / "index.md"
         for directory in self.output_dirs.values():
             directory.mkdir(parents=True, exist_ok=True)
-        self._write_index()
 
     def write_endpoint(self, endpoint_payload: dict[str, Any]) -> str:
         slug = self._slugify(endpoint_payload["path"])
@@ -145,11 +144,10 @@ class MarkdownWriter:
             payload=finding,
         )
         path.write_text(content, encoding="utf-8")
-        self._write_index()
         print(f"[storage] Wrote finding markdown to {path}")
         return str(path)
 
-    def _write_index(self) -> None:
+    def rebuild_findings_index(self) -> None:
         finding_links = sorted(
             self._wikilink("findings", item.stem)
             for item in self.output_dirs["findings"].glob("*.md")

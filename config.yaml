@@ -1,10 +1,10 @@
-base_url: https://jsonplaceholder.typicode.com
+base_url: https://example.local
 headers:
   Accept: application/json
   User-Agent: Aegis-Security-Research-System/1.0
 auth: {}
 endpoints:
-- path: /rest/user/1
+- path: /api/users/123
   method: GET
   params: {}
   headers: {}

@@ -95,6 +95,7 @@ class AutonomousResearchLoop:
     def run(self) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         endpoints = self._load_endpoints()
+        confirmed_findings = 0
         print("[loop] Starting single-pass IDOR research run")
 
         for endpoint in endpoints:
@@ -114,6 +115,9 @@ class AutonomousResearchLoop:
 
             memory_context = self.memory_store.search_memory(f"{endpoint.method.upper()} {endpoint_payload['resource']}")
             hypotheses = generate_hypotheses(endpoint_payload, memory_context=memory_context)
+            if not hypotheses:
+                print(f"[loop] No hypotheses generated for {signature}, skipping endpoint")
+                continue
             hypothesis_record = {
                 "endpoint": endpoint_payload,
                 "selected_hypothesis": hypotheses[0],
@@ -178,7 +182,6 @@ class AutonomousResearchLoop:
                         "validation": validation,
                     }
                     self.writer.write_experiment(endpoint.path, mutation["name"], experiment_record)
-                    self.writer.write_finding(endpoint.path, mutation["name"], experiment_record)
                     self.memory_store.save_memory(
                         {
                             "type": "experiment",
@@ -189,6 +192,7 @@ class AutonomousResearchLoop:
                         }
                     )
                     if validation["decision"] == "Confirmed":
+                        self.writer.write_finding(endpoint.path, mutation["name"], experiment_record)
                         self.memory_store.save_memory(
                             {
                                 "type": "finding",
@@ -198,6 +202,7 @@ class AutonomousResearchLoop:
                                 "payload": experiment_record,
                             }
                         )
+                        confirmed_findings += 1
                     experiments.append(experiment_record)
 
             self.state_store.mark_endpoint_tested(
@@ -220,5 +225,7 @@ class AutonomousResearchLoop:
             )
             print(f"[loop] Completed {signature} with {len(experiments)} experiment(s)")
 
+        self.writer.rebuild_findings_index()
+        print(f"[loop] Rebuilt findings index with {confirmed_findings} confirmed finding(s)")
         print(f"[loop] Run complete. Processed {len(results)} endpoint(s)")
         return results

@@ -1,4 +1,425 @@
-﻿{
-  "entries": [],
-  "updated_at": "2026-04-07T00:00:00+00:00"
+{
+  "entries": [
+    {
+      "label": "GET::/api/users/123",
+      "method": "GET",
+      "path": "/api/users/123",
+      "payload": {
+        "base_url": "https://example.local",
+        "body": {},
+        "headers": {},
+        "method": "GET",
+        "params": {},
+        "path": "/api/users/123",
+        "resource": "users",
+        "source": "config"
+      },
+      "timestamp": "2026-04-07T20:02:19.903015+00:00",
+      "type": "endpoint"
+    },
+    {
+      "label": "GET::/api/users/123",
+      "method": "GET",
+      "path": "/api/users/123",
+      "payload": {
+        "endpoint": {
+          "base_url": "https://example.local",
+          "body": {},
+          "headers": {},
+          "method": "GET",
+          "params": {},
+          "path": "/api/users/123",
+          "resource": "users",
+          "source": "config"
+        },
+        "hypotheses": [
+          {
+            "confidence": "high",
+            "confidence_score": 0.84,
+            "hypothesis": "GET /api/users/123 may expose another users record when object identifiers are changed. Prior related context: GET::/api/users/123",
+            "mutations": [
+              {
+                "body": {},
+                "description": "Replace path identifier with 124.",
+                "headers": {},
+                "name": "path_increment_124",
+                "params": {},
+                "path": "/api/users/124"
+              },
+              {
+                "body": {},
+                "description": "Replace path identifier with 122.",
+                "headers": {},
+                "name": "path_decrement_122",
+                "params": {},
+                "path": "/api/users/122"
+              }
+            ],
+            "name": "idor_identifier_replay",
+            "resource_understanding": "The endpoint appears to operate on the 'users' resource.",
+            "test_cases": [
+              "Send a baseline request to the configured object identifier.",
+              "Replay the request with nearby identifier values and compare authorization behavior.",
+              "Check whether the mutated response returns another object's data with a similar schema."
+            ]
+          },
+          {
+            "confidence": "medium",
+            "confidence_score": 0.67,
+            "hypothesis": "GET /api/users/123 may allow access to high-value or sparse users identifiers without ownership checks. Prior related context: GET::/api/users/123",
+            "mutations": [
+              {
+                "body": {},
+                "description": "Replace path identifier with a distant high value.",
+                "headers": {},
+                "name": "path_high_value_999999",
+                "params": {},
+                "path": "/api/users/999999"
+              }
+            ],
+            "name": "idor_sparse_identifier_enumeration",
+            "resource_understanding": "The final path segments suggest a direct object lookup for 'users'.",
+            "test_cases": [
+              "Try a distant identifier such as 999999 and compare status code and response body size.",
+              "Treat unchanged denial responses as not confirmed rather than positive findings."
+            ]
+          }
+        ],
+        "memory_context": [
+          {
+            "label": "GET::/api/users/123",
+            "method": "GET",
+            "path": "/api/users/123",
+            "payload": {
+              "base_url": "https://example.local",
+              "body": {},
+              "headers": {},
+              "method": "GET",
+              "params": {},
+              "path": "/api/users/123",
+              "resource": "users",
+              "source": "config"
+            },
+            "timestamp": "2026-04-07T20:02:19.903015+00:00",
+            "type": "endpoint"
+          }
+        ],
+        "selected_hypothesis": {
+          "confidence": "high",
+          "confidence_score": 0.84,
+          "hypothesis": "GET /api/users/123 may expose another users record when object identifiers are changed. Prior related context: GET::/api/users/123",
+          "mutations": [
+            {
+              "body": {},
+              "description": "Replace path identifier with 124.",
+              "headers": {},
+              "name": "path_increment_124",
+              "params": {},
+              "path": "/api/users/124"
+            },
+            {
+              "body": {},
+              "description": "Replace path identifier with 122.",
+              "headers": {},
+              "name": "path_decrement_122",
+              "params": {},
+              "path": "/api/users/122"
+            }
+          ],
+          "name": "idor_identifier_replay",
+          "resource_understanding": "The endpoint appears to operate on the 'users' resource.",
+          "test_cases": [
+            "Send a baseline request to the configured object identifier.",
+            "Replay the request with nearby identifier values and compare authorization behavior.",
+            "Check whether the mutated response returns another object's data with a similar schema."
+          ]
+        }
+      },
+      "timestamp": "2026-04-07T20:02:19.922016+00:00",
+      "type": "hypothesis"
+    },
+    {
+      "label": "GET::/api/users/123::path_increment_124",
+      "method": "GET",
+      "path": "/api/users/123",
+      "payload": {
+        "baseline": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/123 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/123"
+        },
+        "candidate": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/124 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/124"
+        },
+        "endpoint": {
+          "base_url": "https://example.local",
+          "body": {},
+          "headers": {},
+          "method": "GET",
+          "params": {},
+          "path": "/api/users/123",
+          "resource": "users",
+          "source": "config"
+        },
+        "hypothesis": {
+          "confidence": "high",
+          "confidence_score": 0.84,
+          "hypothesis": "GET /api/users/123 may expose another users record when object identifiers are changed. Prior related context: GET::/api/users/123",
+          "mutations": [
+            {
+              "body": {},
+              "description": "Replace path identifier with 124.",
+              "headers": {},
+              "name": "path_increment_124",
+              "params": {},
+              "path": "/api/users/124"
+            },
+            {
+              "body": {},
+              "description": "Replace path identifier with 122.",
+              "headers": {},
+              "name": "path_decrement_122",
+              "params": {},
+              "path": "/api/users/122"
+            }
+          ],
+          "name": "idor_identifier_replay",
+          "resource_understanding": "The endpoint appears to operate on the 'users' resource.",
+          "test_cases": [
+            "Send a baseline request to the configured object identifier.",
+            "Replay the request with nearby identifier values and compare authorization behavior.",
+            "Check whether the mutated response returns another object's data with a similar schema."
+          ]
+        },
+        "mutation": {
+          "body": {},
+          "description": "Replace path identifier with 124.",
+          "headers": {},
+          "name": "path_increment_124",
+          "params": {},
+          "path": "/api/users/124"
+        },
+        "validation": {
+          "baseline_size": 266,
+          "baseline_status": 0,
+          "body_changed": true,
+          "candidate_size": 266,
+          "candidate_status": 0,
+          "data_leakage_detected": false,
+          "decision": "Inconclusive",
+          "hypothesis_name": "idor_identifier_replay",
+          "is_interesting": false,
+          "mutation_name": "path_increment_124",
+          "new_leakage_patterns": [],
+          "reasons": [
+            "Transport failure prevented a reliable authorization comparison"
+          ],
+          "response_size_changed": false,
+          "severity": "informational",
+          "status_changed": false
+        }
+      },
+      "timestamp": "2026-04-07T20:02:41.904521+00:00",
+      "type": "experiment"
+    },
+    {
+      "label": "GET::/api/users/123::path_decrement_122",
+      "method": "GET",
+      "path": "/api/users/123",
+      "payload": {
+        "baseline": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/123 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/123"
+        },
+        "candidate": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/122 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/122"
+        },
+        "endpoint": {
+          "base_url": "https://example.local",
+          "body": {},
+          "headers": {},
+          "method": "GET",
+          "params": {},
+          "path": "/api/users/123",
+          "resource": "users",
+          "source": "config"
+        },
+        "hypothesis": {
+          "confidence": "high",
+          "confidence_score": 0.84,
+          "hypothesis": "GET /api/users/123 may expose another users record when object identifiers are changed. Prior related context: GET::/api/users/123",
+          "mutations": [
+            {
+              "body": {},
+              "description": "Replace path identifier with 124.",
+              "headers": {},
+              "name": "path_increment_124",
+              "params": {},
+              "path": "/api/users/124"
+            },
+            {
+              "body": {},
+              "description": "Replace path identifier with 122.",
+              "headers": {},
+              "name": "path_decrement_122",
+              "params": {},
+              "path": "/api/users/122"
+            }
+          ],
+          "name": "idor_identifier_replay",
+          "resource_understanding": "The endpoint appears to operate on the 'users' resource.",
+          "test_cases": [
+            "Send a baseline request to the configured object identifier.",
+            "Replay the request with nearby identifier values and compare authorization behavior.",
+            "Check whether the mutated response returns another object's data with a similar schema."
+          ]
+        },
+        "mutation": {
+          "body": {},
+          "description": "Replace path identifier with 122.",
+          "headers": {},
+          "name": "path_decrement_122",
+          "params": {},
+          "path": "/api/users/122"
+        },
+        "validation": {
+          "baseline_size": 266,
+          "baseline_status": 0,
+          "body_changed": true,
+          "candidate_size": 266,
+          "candidate_status": 0,
+          "data_leakage_detected": false,
+          "decision": "Inconclusive",
+          "hypothesis_name": "idor_identifier_replay",
+          "is_interesting": false,
+          "mutation_name": "path_decrement_122",
+          "new_leakage_patterns": [],
+          "reasons": [
+            "Transport failure prevented a reliable authorization comparison"
+          ],
+          "response_size_changed": false,
+          "severity": "informational",
+          "status_changed": false
+        }
+      },
+      "timestamp": "2026-04-07T20:02:52.873867+00:00",
+      "type": "experiment"
+    },
+    {
+      "label": "GET::/api/users/123::path_high_value_999999",
+      "method": "GET",
+      "path": "/api/users/123",
+      "payload": {
+        "baseline": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/123 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/123"
+        },
+        "candidate": {
+          "body": {
+            "error": "HTTPSConnectionPool(host='example.local', port=443): Max retries exceeded with url: /api/users/999999 (Caused by NameResolutionError(\"HTTPSConnection(host='example.local', port=443): Failed to resolve 'example.local' ([Errno 11001] getaddrinfo failed)\"))"
+          },
+          "elapsed_ms": 0,
+          "headers": {},
+          "status_code": 0,
+          "url": "https://example.local/api/users/999999"
+        },
+        "endpoint": {
+          "base_url": "https://example.local",
+          "body": {},
+          "headers": {},
+          "method": "GET",
+          "params": {},
+          "path": "/api/users/123",
+          "resource": "users",
+          "source": "config"
+        },
+        "hypothesis": {
+          "confidence": "high",
+          "confidence_score": 0.84,
+          "hypothesis": "GET /api/users/123 may expose another users record when object identifiers are changed. Prior related context: GET::/api/users/123",
+          "mutations": [
+            {
+              "body": {},
+              "description": "Replace path identifier with 124.",
+              "headers": {},
+              "name": "path_increment_124",
+              "params": {},
+              "path": "/api/users/124"
+            },
+            {
+              "body": {},
+              "description": "Replace path identifier with 122.",
+              "headers": {},
+              "name": "path_decrement_122",
+              "params": {},
+              "path": "/api/users/122"
+            }
+          ],
+          "name": "idor_identifier_replay",
+          "resource_understanding": "The endpoint appears to operate on the 'users' resource.",
+          "test_cases": [
+            "Send a baseline request to the configured object identifier.",
+            "Replay the request with nearby identifier values and compare authorization behavior.",
+            "Check whether the mutated response returns another object's data with a similar schema."
+          ]
+        },
+        "mutation": {
+          "body": {},
+          "description": "Replace path identifier 123 with 999999.",
+          "headers": {},
+          "name": "path_high_value_999999",
+          "params": {},
+          "path": "/api/users/999999"
+        },
+        "validation": {
+          "baseline_size": 266,
+          "baseline_status": 0,
+          "body_changed": true,
+          "candidate_size": 269,
+          "candidate_status": 0,
+          "data_leakage_detected": false,
+          "decision": "Inconclusive",
+          "hypothesis_name": "idor_identifier_replay",
+          "is_interesting": false,
+          "mutation_name": "path_high_value_999999",
+          "new_leakage_patterns": [],
+          "reasons": [
+            "Transport failure prevented a reliable authorization comparison"
+          ],
+          "response_size_changed": false,
+          "severity": "informational",
+          "status_changed": false
+        }
+      },
+      "timestamp": "2026-04-07T20:03:03.848678+00:00",
+      "type": "experiment"
+    }
+  ],
+  "updated_at": "2026-04-07T20:03:03.848678+00:00"
 }
